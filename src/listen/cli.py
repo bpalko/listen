@@ -47,6 +47,9 @@ def build_parser() -> argparse.ArgumentParser:
     listing = commands.add_parser("list", help="show the episodes on disk")
     listing.set_defaults(handler=command_list)
 
+    voices = commands.add_parser("voices", help="show the ElevenLabs voices on your account")
+    voices.set_defaults(handler=command_voices)
+
     return parser
 
 
@@ -102,8 +105,25 @@ def report_draft(episode) -> int:
     return 0
 
 
+def command_voices(args: argparse.Namespace) -> int:
+    found = speech.list_voices(speech.make_client())
+    if not found:
+        print("no voices on this account; add one at elevenlabs.io first")
+        return 0
+    id_width = max(len(voice.voice_id) for voice in found)
+    kind_width = max(len(voice.category) for voice in found)
+    for voice in found:
+        print(f"{voice.voice_id:<{id_width}}  {voice.category:<{kind_width}}  {voice.name}")
+    print("\nput one of these ids in listen.toml as voice_id")
+    return 0
+
+
 def command_synth(args: argparse.Namespace) -> int:
     config = config_module.load()
+    if not config.voice_id.strip():
+        raise ListenError(
+            f"no voice_id set in {config.path}; run `listen voices` and put one there"
+        )
     episode = episode_store.resolve(config, args.id)
     speech.require_ffmpeg()
 

@@ -184,8 +184,13 @@ def test_an_unknown_episode_id_is_404(live):
 
 def test_a_traversal_attempt_is_404(live):
     request, config, _ = live
-    status, _, _ = request(f"/{config.token}/episodes/..%2F..%2Ffeed.xml")
-    assert status == 404
+    for path in (
+        f"/{config.token}/episodes/..%2F..%2Ffeed.xml",
+        f"/{config.token}/episodes/....mp3",
+        f"/{config.token}/episodes/..%2Faudio.mp3",
+    ):
+        status, _, _ = request(path)
+        assert status == 404, path
 
 
 def test_drafts_are_not_listed_on_the_page(config, ready_episode):

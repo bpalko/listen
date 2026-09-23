@@ -174,11 +174,12 @@ class ListenHandler(BaseHTTPRequestHandler):
         self.send_bytes(payload, "application/rss+xml; charset=utf-8", body)
 
     def send_episode(self, episode_id: str, body: bool) -> None:
-        if not SAFE_ID.match(episode_id):
+        if not SAFE_ID.match(episode_id) or episode_id in {".", ".."}:
             self.fail(HTTPStatus.NOT_FOUND)
             return
-        path = self.config.episodes_path / episode_id / "audio.mp3"
-        if not path.is_file():
+        root = self.config.episodes_path.resolve()
+        path = (root / episode_id / "audio.mp3").resolve()
+        if not path.is_relative_to(root) or not path.is_file():
             self.fail(HTTPStatus.NOT_FOUND)
             return
         self.send_file(path, "audio/mpeg", body)

@@ -77,6 +77,11 @@ def workspace(tmp_path, monkeypatch, tone_mp3):
     monkeypatch.setattr(speech, "make_client", lambda: fake)
 
     assert cli.main(["init"]) == 0
+    config_path = tmp_path / "listen.toml"
+    config_path.write_text(
+        config_path.read_text(encoding="utf-8").replace('voice_id = ""', 'voice_id = "a-voice-id"'),
+        encoding="utf-8",
+    )
     return config_module.load(tmp_path), fake
 
 
@@ -150,6 +155,20 @@ def test_a_url_becomes_a_draft_then_a_downloadable_mp3(workspace, capsys):
 
     # Stopping the server leaves the episode on disk.
     assert done.audio_path.is_file()
+
+
+def test_synth_without_a_voice_id_says_to_run_listen_voices(workspace, capsys):
+    config, _ = workspace
+    config.path.write_text(
+        config.path.read_text(encoding="utf-8").replace('voice_id = "a-voice-id"', 'voice_id = ""'),
+        encoding="utf-8",
+    )
+    assert cli.main(["add", "url", "https://example.com/coffee"]) == 0
+    episode = only_episode(config, episode_store.KIND_SOURCE)
+
+    assert cli.main(["synth", episode.id]) == 1
+    assert "listen voices" in capsys.readouterr().err
+    assert not episode.audio_path.exists()
 
 
 def test_a_lesson_prompt_becomes_an_episode_on_the_same_feed(workspace, monkeypatch):

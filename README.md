@@ -45,11 +45,24 @@ listen init
 Every later command finds that config in the current directory or a parent, so run them from
 anywhere inside `~/listen`.
 
+Then pick a voice. `voice_id` starts empty, and `synth` refuses to run until you set it:
+
+```bash
+export ELEVENLABS_API_KEY='...'
+listen voices                    # ids, category, and name for the voices on your account
+```
+
+Put one of those ids in `listen.toml`. Use a voice the API will actually give you: a free plan
+can use the default voices and your own clones, but not voices from the shared voice library,
+which fail with `paid_plan_required`. `listen voices` lists the voices on your account and
+leaves out the legacy ones. A library voice can still be in that list and still be refused on a
+free plan; if `synth` says so, pick a premade or cloned voice instead.
+
 `listen.toml`:
 
 | Field | Default | Meaning |
 | --- | --- | --- |
-| `voice_id` | a stock ElevenLabs voice | The voice that reads your episodes. Change this first. |
+| `voice_id` | empty | The voice that reads your episodes. Set it from `listen voices`. |
 | `model_id` | `eleven_multilingual_v2` | ElevenLabs model |
 | `output_format` | `mp3_44100_128` | ElevenLabs output format |
 | `port` | `8765` | Port `listen serve` binds |
@@ -136,7 +149,9 @@ copy in your podcast app.
 - **Every URL sits under the token**, and anything outside it is a 404. The audio links always
   use the LAN address, never `localhost`.
 - **Failures are one line.** A missing key, a missing `ffmpeg`, a page with no article text: each
-  exits with a single line naming what is missing, and an empty extract writes no episode.
+  exits with a single line naming what is missing, and an empty extract writes no episode. What
+  ElevenLabs refuses is translated too, so a rejected key, an unknown voice, a voice your plan
+  cannot use, and a rate limit each read as a sentence instead of a raw 4xx body.
 
 ## Commands
 
@@ -148,6 +163,7 @@ copy in your podcast app.
 | `listen synth <id>` | Speak the saved script, join the audio, mark the episode ready |
 | `listen serve` | Serve the page, the feed, and the MP3s on the LAN |
 | `listen list` | Show every episode, draft and ready |
+| `listen voices` | Show the ElevenLabs voices on your account |
 
 ## Tests
 

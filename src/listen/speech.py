@@ -5,6 +5,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 
 from .errors import ListenError
@@ -113,6 +114,70 @@ def make_client():
     return ElevenLabs(api_key=require_api_key())
 
 
+def api_error_parts(error: Exception) -> tuple[int | None, str, str]:
+    """Pull the status, the API's own code, and its message out of an ElevenLabs error."""
+    status = getattr(error, "status_code", None)
+    body = getattr(error, "body", None)
+    detail = body.get("detail") if isinstance(body, dict) else None
+    if not isinstance(detail, dict):
+        detail = body if isinstance(body, dict) else {}
+
+    code = str(detail.get("code") or detail.get("status") or "")
+    message = str(detail.get("message") or "").strip()
+    if not message and isinstance(detail, dict) and isinstance(body, dict):
+        message = str(body.get("message") or "").strip()
+    if not message and isinstance(body, str):
+        message = body.strip().replace("\n", " ")[:200]
+    if not message and getattr(error, "headers", None) is None:
+        message = str(error).strip().replace("\n", " ")[:200]
+    return status, code, message or "the request was refused"
+
+
+def describe_api_error(error: Exception, voice_id: str = "") -> str:
+    """One line naming what ElevenLabs refused, and what to do about it."""
+    status, code, message = api_error_parts(error)
+    voice = f" voice {voice_id}" if voice_id else " that voice"
+
+    if code == "paid_plan_required" or status == 402:
+        return (
+            f"{message} Listen asked for{voice}; run `listen voices` and pick one from your own "
+            "account, since voice library voices need a paid plan."
+        )
+    if status == 401:
+        return f"ElevenLabs rejected ELEVENLABS_API_KEY: {message}"
+    if status == 404 or code in ("voice_not_found", "not_found"):
+        return f"ElevenLabs has no{voice} on your account: {message} Run `listen voices`."
+    if status == 429 or code in ("too_many_requests", "quota_exceeded"):
+        return f"ElevenLabs is rate limiting or out of quota: {message}"
+    return message
+
+
+@dataclass(frozen=True)
+class VoiceChoice:
+    voice_id: str
+    name: str
+    category: str
+
+
+def list_voices(client) -> list[VoiceChoice]:
+    """The voices on this account, default voices first. Legacy library voices are left out."""
+    try:
+        response = client.voices.get_all(show_legacy=False)
+    except Exception as exc:
+        raise ListenError(f"could not list voices: {describe_api_error(exc)}") from exc
+
+    choices = [
+        VoiceChoice(
+            voice_id=voice.voice_id,
+            name=(getattr(voice, "name", "") or "").strip(),
+            category=(getattr(voice, "category", "") or "").strip(),
+        )
+        for voice in getattr(response, "voices", []) or []
+    ]
+    choices.sort(key=lambda choice: (choice.category != "premade", choice.category, choice.name))
+    return choices
+
+
 def chunk_path(chunks_dir: Path, index: int) -> Path:
     return chunks_dir / f"{index:03d}.mp3"
 
@@ -191,7 +256,8 @@ def synthesize_chunks(
             raise
         except Exception as exc:
             raise ListenError(
-                f"ElevenLabs failed on chunk {index + 1} of {len(chunks)}: {exc}"
+                f"ElevenLabs failed on chunk {index + 1} of {len(chunks)}: "
+                f"{describe_api_error(exc, voice_id)}"
             ) from exc
         paths.append(destination)
     return paths

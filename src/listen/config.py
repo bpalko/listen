@@ -10,7 +10,7 @@ from .errors import ListenError
 
 CONFIG_NAME = "listen.toml"
 
-DEFAULT_VOICE_ID = "21m00Tcm4TlvDq8ikWAM"
+DEFAULT_VOICE_ID = ""
 DEFAULT_MODEL_ID = "eleven_multilingual_v2"
 DEFAULT_OUTPUT_FORMAT = "mp3_44100_128"
 DEFAULT_PORT = 8765
@@ -51,7 +51,9 @@ class Config:
 def render(config: Config) -> str:
     """Render a config as the listen.toml text written by `listen init`."""
     return (
-        "# Listen configuration. Edit voice_id to pick an ElevenLabs voice.\n"
+        "# Listen configuration.\n"
+        "# voice_id is required before you can synthesize. `listen voices` lists the ones on\n"
+        "# your account; free plans cannot use voice library voices over the API.\n"
         f'voice_id = "{config.voice_id}"\n'
         f'model_id = "{config.model_id}"\n'
         f'output_format = "{config.output_format}"\n'

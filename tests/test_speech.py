@@ -5,13 +5,24 @@ import pytest
 from listen.errors import ListenError
 from listen.speech import (
     CONTEXT_CHARS,
+    describe_api_error,
     drop_stale_chunks,
     format_duration,
+    list_voices,
     pack_chunks,
     require_api_key,
     synthesize_chunks,
     write_audio,
 )
+
+
+class FakeApiError(Exception):
+    """Shaped like elevenlabs.core.api_error.ApiError."""
+
+    def __init__(self, status_code, body):
+        super().__init__(f"status_code: {status_code}, body: {body}")
+        self.status_code = status_code
+        self.body = body
 
 
 class FakeTextToSpeech:
@@ -226,6 +237,122 @@ def test_the_installed_sdk_accepts_every_argument_we_send():
     for name in ("voice_id", "model_id", "output_format", "text", "previous_text", "next_text"):
         assert name in accepted, f"the elevenlabs SDK no longer accepts {name}"
     assert CONTEXT_CHARS == 1000
+
+
+def test_a_library_voice_on_a_free_plan_says_what_to_do():
+    error = FakeApiError(
+        402,
+        {
+            "detail": {
+                "status": "payment_required",
+                "code": "paid_plan_required",
+                "message": "Free users cannot use library voices via the API. Please upgrade your "
+                "subscription to use this voice.",
+                "request_id": "6711580824f9e3f2291077269ce4eef2",
+            }
+        },
+    )
+    line = describe_api_error(error, voice_id="21m00Tcm4TlvDq8ikWAM")
+
+    assert "Free users cannot use library voices" in line
+    assert "21m00Tcm4TlvDq8ikWAM" in line
+    assert "listen voices" in line
+    assert "\n" not in line
+
+
+def test_a_rejected_key_names_the_variable():
+    error = FakeApiError(401, {"detail": {"message": "Invalid API key."}})
+    assert "ELEVENLABS_API_KEY" in describe_api_error(error)
+
+
+def test_an_unknown_voice_points_at_the_voice_list():
+    error = FakeApiError(404, {"detail": {"message": "A voice for the voice_id was not found."}})
+    line = describe_api_error(error, voice_id="nope")
+    assert "no voice nope" in line
+    assert "listen voices" in line
+
+
+def test_a_rate_limit_says_so():
+    error = FakeApiError(429, {"detail": {"status": "too_many_requests", "message": "Slow down."}})
+    assert "rate limiting or out of quota" in describe_api_error(error)
+
+
+def test_an_error_with_no_api_body_still_gives_one_line():
+    line = describe_api_error(RuntimeError("connection reset by peer"))
+    assert line == "connection reset by peer"
+
+
+def test_a_refusal_does_not_print_response_headers():
+    error = FakeApiError(500, None)
+    error.headers = {"xi-api-key": "secret-key-value"}
+    error.args = (f"headers: {error.headers}, status_code: 500, body: None",)
+    line = describe_api_error(error)
+    assert line == "the request was refused"
+    assert "secret-key-value" not in line
+
+
+def test_a_failed_chunk_carries_the_api_explanation(tmp_path):
+    class RefusingClient:
+        def __init__(self):
+            self.text_to_speech = self
+
+        def convert(self, **_):
+            raise FakeApiError(402, {"detail": {"code": "paid_plan_required", "message": "Nope."}})
+
+    with pytest.raises(ListenError) as error:
+        synthesize_chunks(
+            RefusingClient(),
+            ["one"],
+            tmp_path / "chunks",
+            voice_id="21m00Tcm4TlvDq8ikWAM",
+            model_id="model",
+            output_format="mp3_44100_128",
+        )
+    message = str(error.value)
+    assert "chunk 1 of 1" in message
+    assert "listen voices" in message
+
+
+def test_list_voices_puts_the_default_voices_first():
+    class Voice:
+        def __init__(self, voice_id, name, category):
+            self.voice_id, self.name, self.category = voice_id, name, category
+
+    class Response:
+        voices = [
+            Voice("c1", "My clone", "cloned"),
+            Voice("p2", "Roger", "premade"),
+            Voice("p1", "Aria", "premade"),
+        ]
+
+    class FakeVoicesClient:
+        def __init__(self):
+            self.voices = self
+            self.kwargs = None
+
+        def get_all(self, **kwargs):
+            self.kwargs = kwargs
+            return Response()
+
+    client = FakeVoicesClient()
+    found = list_voices(client)
+
+    assert [voice.name for voice in found] == ["Aria", "Roger", "My clone"]
+    assert client.kwargs == {"show_legacy": False}, "legacy library voices are left out"
+
+
+def test_list_voices_reports_a_refusal_as_one_line():
+    class FailingVoicesClient:
+        def __init__(self):
+            self.voices = self
+
+        def get_all(self, **_):
+            raise FakeApiError(401, {"detail": {"message": "Invalid API key."}})
+
+    with pytest.raises(ListenError) as error:
+        list_voices(FailingVoicesClient())
+    assert "could not list voices" in str(error.value)
+    assert "ELEVENLABS_API_KEY" in str(error.value)
 
 
 def test_drop_stale_chunks_removes_files_past_the_new_end(tmp_path):
