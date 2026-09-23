@@ -1,0 +1,17 @@
+# Listen libraries are local and private
+listen.toml
+data/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.venv/
+venv/
+
+# Environment files that would hold keys
+.env
+.env.*
