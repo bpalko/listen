@@ -70,7 +70,7 @@ class FakeElevenLabs:
 def workspace(tmp_path, monkeypatch, tone_mp3):
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("LISTEN_CONFIG", raising=False)
-    monkeypatch.setenv("ELEVENLABS_API_KEY", "a-fake-key-for-tests")
+    monkeypatch.delenv("ELEVENLABS_API_KEY", raising=False)
     monkeypatch.setattr(extract, "fetch", lambda url: ARTICLE)
     monkeypatch.setattr(lesson, "request_script", lambda prompt, settings=None: LESSON_REPLY)
     fake = FakeElevenLabs(tone_mp3)
@@ -155,7 +155,7 @@ def test_a_url_becomes_a_draft_then_a_downloadable_mp3(workspace, capsys):
 def test_a_lesson_prompt_becomes_an_episode_on_the_same_feed(workspace, monkeypatch):
     config, _ = workspace
     monkeypatch.setenv("LISTEN_LLM_BASE_URL", "https://api.example.com/v1")
-    monkeypatch.setenv("LISTEN_LLM_API_KEY", "a-fake-key-for-tests")
+    monkeypatch.setenv("LISTEN_LLM_API_KEY", "not-a-real-key")
     monkeypatch.setenv("LISTEN_LLM_MODEL", "a-model")
 
     assert cli.main(["add", "url", "https://example.com/coffee"]) == 0

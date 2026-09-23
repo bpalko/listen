@@ -4,9 +4,11 @@ import pytest
 
 from listen.errors import ListenError
 from listen.speech import (
+    CONTEXT_CHARS,
     drop_stale_chunks,
     format_duration,
     pack_chunks,
+    require_api_key,
     synthesize_chunks,
     write_audio,
 )
@@ -201,6 +203,29 @@ def test_synthesize_chunks_keeps_written_chunks_when_a_call_fails(tmp_path):
     assert "chunk 2 of 3" in str(error.value)
     assert (chunks_dir / "000.mp3").is_file()
     assert not (chunks_dir / "001.mp3").exists()
+
+
+def test_require_api_key_names_the_missing_variable(monkeypatch):
+    monkeypatch.delenv("ELEVENLABS_API_KEY", raising=False)
+    with pytest.raises(ListenError) as error:
+        require_api_key()
+    assert "ELEVENLABS_API_KEY" in str(error.value)
+
+    monkeypatch.setenv("ELEVENLABS_API_KEY", "   ")
+    with pytest.raises(ListenError):
+        require_api_key()
+
+
+def test_the_installed_sdk_accepts_every_argument_we_send():
+    """Catch SDK drift without a key: the live call is the one path tests cannot run."""
+    import inspect
+
+    from elevenlabs.text_to_speech.client import TextToSpeechClient
+
+    accepted = inspect.signature(TextToSpeechClient.convert).parameters
+    for name in ("voice_id", "model_id", "output_format", "text", "previous_text", "next_text"):
+        assert name in accepted, f"the elevenlabs SDK no longer accepts {name}"
+    assert CONTEXT_CHARS == 1000
 
 
 def test_drop_stale_chunks_removes_files_past_the_new_end(tmp_path):
