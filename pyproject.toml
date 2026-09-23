@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "listen"
+version = "0.1.0"
+description = "A private local podcast: add episodes from a URL or a lesson prompt, synthesize, serve to your phone over Wi-Fi"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "elevenlabs>=1.0",
+    "httpx>=0.27",
+    "trafilatura>=1.8",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+listen = "listen.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
